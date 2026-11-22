@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "BlueskyPost",
+  "namespace": "io.github.tasnimrh.brandpulse",
+  "doc": "One new public Bluesky post from the Jetstream live feed.",
+  "fields": [
+    {"name": "uri", "type": "string", "doc": "at:// URI, unique per post; used to de-duplicate."},
+    {"name": "did", "type": "string", "doc": "Author's decentralized identifier (public)."},
+    {"name": "rkey", "type": "string"},
+    {"name": "text", "type": "string"},
+    {"name": "langs", "type": {"type": "array", "items": "string"}, "default": []},
+    {"name": "is_reply", "type": "boolean", "default": false},
+    {"name": "created_at", "type": ["null", "string"], "default": null, "doc": "Author-supplied timestamp, can be wrong."},
+    {"name": "event_time", "type": {"type": "long", "logicalType": "timestamp-micros"}, "doc": "When Bluesky's relay saw the post. Used for windows."}
+  ]
+}

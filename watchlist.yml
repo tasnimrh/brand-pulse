@@ -1,0 +1,131 @@
+# Brands to watch. Matching is case-insensitive on whole words unless an alias is listed
+# under case_sensitive. Ambiguous names (Rogers, Bell, TD) only match in unambiguous forms,
+# and exclude patterns drop known false positives before a post counts as a mention.
+brands:
+  # Canadian
+  - name: Air Canada
+    ticker: AC.TO
+    sector: Airlines
+    aliases: ["air canada", "aircanada", "@aircanada"]
+  - name: WestJet
+    sector: Airlines
+    aliases: ["westjet", "@westjet"]
+  - name: Porter Airlines
+    sector: Airlines
+    aliases: ["porter airlines", "flyporter", "@flyporter"]
+  - name: VIA Rail
+    sector: Transport
+    aliases: ["via rail", "viarail"]
+  - name: Tim Hortons
+    ticker: QSR
+    sector: Restaurants
+    aliases: ["tim hortons", "tim horton's", "timmies", "timhortons"]
+  - name: Shopify
+    ticker: SHOP
+    sector: Technology
+    aliases: ["shopify"]
+  - name: Lululemon
+    ticker: LULU
+    sector: Retail
+    aliases: ["lululemon", "lulu lemon"]
+  - name: Canadian Tire
+    ticker: CTC-A.TO
+    sector: Retail
+    aliases: ["canadian tire"]
+  - name: Loblaw
+    ticker: L.TO
+    sector: Grocery
+    aliases: ["loblaw", "loblaws", "no frills", "shoppers drug mart"]
+    exclude: ["galen weston"]   # counted separately if added as a person watch later
+  - name: Rogers
+    ticker: RCI-B.TO
+    sector: Telecom
+    aliases: ["rogers communications", "rogers wireless", "rogers internet", "rogers outage", "@rogersbuzz"]
+  - name: Bell Canada
+    ticker: BCE.TO
+    sector: Telecom
+    aliases: ["bell canada", "bell mobility", "bell fibe", "bell outage", "bce inc"]
+  - name: Telus
+    ticker: T.TO
+    sector: Telecom
+    aliases: ["telus"]
+  - name: RBC
+    ticker: RY.TO
+    sector: Banking
+    aliases: ["royal bank of canada", "rbc royal bank"]
+    case_sensitive: ["RBC"]
+  - name: TD Bank
+    ticker: TD.TO
+    sector: Banking
+    aliases: ["td bank", "td canada trust", "toronto-dominion"]
+  - name: BMO
+    ticker: BMO.TO
+    sector: Banking
+    aliases: ["bank of montreal"]
+    case_sensitive: ["BMO"]
+  - name: Scotiabank
+    ticker: BNS.TO
+    sector: Banking
+    aliases: ["scotiabank", "scotia bank"]
+  - name: Desjardins
+    sector: Banking
+    aliases: ["desjardins"]
+  - name: Hydro-Québec
+    sector: Utilities
+    aliases: ["hydro-québec", "hydro-quebec", "hydro quebec", "hydro québec"]
+  - name: Couche-Tard
+    ticker: ATD.TO
+    sector: Retail
+    aliases: ["couche-tard", "couche tard", "circle k"]
+  - name: Dollarama
+    ticker: DOL.TO
+    sector: Retail
+    aliases: ["dollarama"]
+
+  # Global, for volume and comparison
+  - name: Tesla
+    ticker: TSLA
+    sector: Automotive
+    aliases: ["tesla"]
+    exclude: ["nikola tesla"]
+  - name: Starbucks
+    ticker: SBUX
+    sector: Restaurants
+    aliases: ["starbucks"]
+  - name: Netflix
+    ticker: NFLX
+    sector: Media
+    aliases: ["netflix"]
+  - name: Spotify
+    ticker: SPOT
+    sector: Media
+    aliases: ["spotify"]
+  - name: Uber
+    ticker: UBER
+    sector: Transport
+    aliases: ["uber"]
+    exclude: ["uber eats"]   # tracked as its own brand below
+  - name: Uber Eats
+    ticker: UBER
+    sector: Delivery
+    aliases: ["uber eats", "ubereats"]
+  - name: Delta Air Lines
+    ticker: DAL
+    sector: Airlines
+    aliases: ["delta air lines", "delta airlines", "@delta"]
+  - name: United Airlines
+    ticker: UAL
+    sector: Airlines
+    aliases: ["united airlines"]
+  - name: Amazon
+    ticker: AMZN
+    sector: Retail
+    aliases: ["amazon prime", "amazon.com", "aws outage", "amazon"]
+    exclude: ["amazon rainforest", "amazon river", "the amazon basin"]
+  - name: OpenAI
+    sector: Technology
+    aliases: ["openai", "chatgpt"]
+  - name: Microsoft
+    ticker: MSFT
+    sector: Technology
+    aliases: ["microsoft", "windows update", "outlook outage", "teams outage"]
