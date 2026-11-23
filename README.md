@@ -6,9 +6,26 @@ Every new public post on Bluesky streams from a laptop into Kafka, then through 
 
 Built for fun, to answer one question: *when a brand has a bad day, how fast does it show up in public?*
 
-## Results
+## Results: first live run (22 November 2026, 5:14 pm to 7:58 pm Montreal time)
 
-_First live run: to be filled in from the `alerts_explained` table (posts processed, alerts raised, a worked example, and matching precision from the hand-labelled audit sample)._
+| | |
+|---|---|
+| Public posts processed | **359,699** (about 35 a second, every language) |
+| Duplicate Kafka deliveries caught | 8 in the first 351,125, removed by post URI |
+| Brand mentions found | **1,824** across 18 of the 31 brands |
+| Of those, deal bots and affiliate ads | **303 (17%)**, rising to **30% of Amazon's** 994 |
+| Brand windows scored (5 minutes each) | 1,054 |
+| Alerts on the final rules | **0** on a quiet Sunday evening |
+
+Most negative conversation among brands with 50+ real mentions: **Uber (52% negative)** and **Delta Air Lines (49%)**, against 25 to 28% for OpenAI, Netflix, Spotify and Microsoft.
+
+### What the live data taught me
+
+The first version looked fine in tests and was wrong on real data in three ways. Each fix is in the code and covered by a test.
+
+1. **Amazon's "conversation" was mostly bots.** The first run counted 1,253 Amazon mentions. Sampling them showed deal bots and affiliate posts ("only $9.92 (Reg $14.17) amzn.to/..."). They are now kept in silver but excluded from counts and alerts (`PROMO_PATTERN` in `brandpulse/match.py`).
+2. **A link is not a mention.** The first alert fired: Spotify, 16 mentions against 4.9 expected. Reading the posts showed it was mostly people sharing songs (`open.spotify.com/track/...`). URLs are now removed before matching. That cut total matches by about a third (2,668 on 351,125 posts before, 1,824 on 359,699 after) and removed the false alert.
+3. **Streaming jobs that never finish.** On Databricks serverless, `availableNow` streams read everything and then kept running, so a scheduled job could never end. Bronze is now an incremental batch read that stores each record's Kafka partition and offset and starts the next run one past the last offset: exactly once, and it always terminates.
 
 ## How it works
 
@@ -16,7 +33,7 @@ _First live run: to be filled in from the `alerts_explained` table (posts proces
 flowchart LR
     J[Bluesky Jetstream<br/>every new public post] --> P[Python producer<br/>reconnects with cursor]
     P -->|Avro + Schema Registry| K[[Kafka topic<br/>bluesky.posts]]
-    K -->|Structured Streaming| B[(Bronze<br/>all posts)]
+    K -->|incremental read<br/>by offset| B[(Bronze<br/>all posts)]
     B -->|match brands, VADER| S[(Silver<br/>brand mentions)]
     S --> G[(Gold<br/>brand x 5-min window<br/>zero-filled)]
     G --> A{{Alerts<br/>share-of-voice spike<br/>Poisson test}}
@@ -25,8 +42,8 @@ flowchart LR
 
 | Layer | Table | Built by |
 |---|---|---|
-| Bronze | `bronze_posts`: every post, decoded from Avro | Structured Streaming, `availableNow` |
-| Silver | `silver_mentions`: one row per post and brand, with sentiment | Structured Streaming + pandas UDFs |
+| Bronze | `bronze_posts`: every post, decoded from Avro, with Kafka partition and offset | incremental batch, resumes one past the last offset |
+| Silver | `silver_mentions`: one row per post and brand, with sentiment | incremental by Kafka time, pandas UDFs |
 | Gold | `gold_brand_windows`: per brand, per 5-minute window, with platform volume | batch rebuild |
 | Alerts | `alerts`, `alerts_explained` | `applyInPandas` per brand, then term analysis |
 
@@ -73,12 +90,12 @@ pytest -q
 
 - Bluesky is not the whole internet. Its users skew toward certain communities, so this measures conversation on Bluesky, not public opinion.
 - VADER misses sarcasm and is English-only.
-- `availableNow` runs are near-real-time (every few minutes), not sub-second.
+- Runs are near-real-time (a scheduled job every few minutes), not sub-second.
 - Thresholds were set by reasoning, not tuned on labelled incidents. Measuring alert precision against real outages is the next step.
 
 ## Stack
 
-Bluesky Jetstream · Apache Kafka (Confluent Cloud) · Schema Registry · Avro · PySpark Structured Streaming · pandas UDFs · Databricks (serverless, Unity Catalog) · Delta Lake · VADER
+Bluesky Jetstream · Apache Kafka (Confluent Cloud) · Schema Registry · Avro · PySpark · pandas UDFs · Databricks (serverless, Unity Catalog) · Delta Lake · VADER
 
 ---
 
