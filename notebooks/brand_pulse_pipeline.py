@@ -56,26 +56,34 @@ print("repo:", REPO_ROOT)
 import time
 
 
+def _rows(p):
+    if p is None:
+        return 0
+    if isinstance(p, dict):
+        return p.get("numInputRows", 0) or 0
+    return getattr(p, "numInputRows", 0) or 0
+
+
 def finish(q, label, timeout_s=900, idle_s=60):
     """Wait for an availableNow stream without trusting awaitTermination.
 
-    On serverless, awaitTermination() can keep blocking after the query has processed
-    everything. So poll instead: count completed micro-batches, and stop once none has
-    finished for idle_s seconds (availableNow runs its batches back to back, so a pause
-    means it is done), or after timeout_s as a hard ceiling.
+    On serverless the query can stay active after it has read everything, reporting empty
+    progress, and awaitTermination() keeps blocking. So poll instead: stop once no rows
+    have arrived for idle_s seconds, or after timeout_s as a hard ceiling.
     """
-    t0, seen, last_change = time.time(), 0, time.time()
+    t0, last_rows_at, total = time.time(), time.time(), 0
     while q.isActive:
         time.sleep(5)
-        n = len(q.recentProgress or [])
-        if n != seen:
-            seen, last_change = n, time.time()
-        if time.time() - last_change > idle_s or time.time() - t0 > timeout_s:
+        rows = _rows(q.lastProgress)
+        if rows > 0:
+            last_rows_at = time.time()
+            total += rows
+        if time.time() - last_rows_at > idle_s or time.time() - t0 > timeout_s:
             q.stop()
             break
     if q.exception():
         raise q.exception()
-    print(f"{label}: done in {time.time() - t0:.0f}s after {seen} micro-batches")
+    print(f"{label}: done in {time.time() - t0:.0f}s")
 
 
 # COMMAND ----------
