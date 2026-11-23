@@ -71,3 +71,12 @@ def test_pipeline_finds_the_outage_and_nothing_else(spark):
     assert {a.brand for a in alerts} == {"Air Canada"}
     assert all(a.window_start.hour == 21 and a.window_start.minute >= 20 for a in alerts)
     assert any(a.label == "negative spike" for a in alerts)
+
+
+def test_kafka_start_offsets_resume_one_past_the_last_offset(spark):
+    import json
+
+    bronze = spark.createDataFrame([(0, 10), (0, 12), (2, 5)], "kafka_partition int, kafka_offset long")
+    got = json.loads(sj.kafka_start_offsets(bronze, "bluesky.posts", 3))
+    assert got == {"bluesky.posts": {"0": 13, "1": -2, "2": 6}}
+    assert sj.kafka_start_offsets(None, "t", 3) == "earliest"

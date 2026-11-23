@@ -61,8 +61,26 @@ def build_silver(bronze: DataFrame, watchlist_yaml: str) -> DataFrame:
             .when(F.col("compound") >= POS, "positive")
             .otherwise("neutral"),
         )
-        .select("uri", "did", "rkey", "brand", "text", "langs", "is_reply", "event_time", "compound", "sentiment")
+        .select("uri", "did", "rkey", "brand", "text", "langs", "is_reply", "event_time", "compound", "sentiment",
+                *(["kafka_time"] if "kafka_time" in bronze.columns else []))
     )
+
+
+def kafka_start_offsets(bronze: DataFrame | None, topic: str, partitions: int) -> str:
+    """Where the next incremental Kafka read should begin, as Spark's startingOffsets JSON.
+
+    Each partition resumes one past the highest offset already in bronze, so every record
+    is read exactly once across runs. Partitions bronze has never seen start from the
+    earliest retained offset (-2).
+    """
+    import json
+
+    if bronze is None or "kafka_offset" not in bronze.columns:
+        return "earliest"
+    rows = (bronze.where(F.col("kafka_offset").isNotNull())
+            .groupBy("kafka_partition").agg(F.max("kafka_offset").alias("m")).collect())
+    seen = {int(r.kafka_partition): int(r.m) + 1 for r in rows}
+    return json.dumps({topic: {str(p): seen.get(p, -2) for p in range(partitions)}})
 
 
 def platform_windows(bronze: DataFrame, minutes: int = 5) -> DataFrame:

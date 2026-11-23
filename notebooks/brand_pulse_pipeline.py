@@ -9,14 +9,16 @@
 # MAGIC
 # MAGIC | Layer | Table | What it holds |
 # MAGIC |---|---|---|
-# MAGIC | Bronze | `bronze_posts` | every post, decoded from Avro (streaming) |
-# MAGIC | Silver | `silver_mentions` | one row per post and brand, with VADER sentiment (streaming) |
+# MAGIC | Bronze | `bronze_posts` | every post, decoded from Avro, with its Kafka partition and offset |
+# MAGIC | Silver | `silver_mentions` | one row per post and brand, with VADER sentiment |
 # MAGIC | Gold | `gold_brand_windows` | per brand, per 5-minute window, zero-filled, with platform volume |
 # MAGIC | Alerts | `alerts` | scored windows, and `alerts_explained` with surging words and evidence |
 # MAGIC
-# MAGIC Runs on Databricks Free Edition serverless. Streams use `availableNow`, so each run processes
-# MAGIC what is new since the last checkpoint and stops. Schedule the notebook as a job every 10 minutes
-# MAGIC for a near-live view.
+# MAGIC Runs on Databricks Free Edition serverless as incremental batches: each run reads Kafka from
+# MAGIC the offsets bronze already holds up to the latest, so every record is read exactly once and the
+# MAGIC run always ends. (Structured Streaming with `availableNow` was the first design; on serverless the
+# MAGIC queries kept running after catching up, so a scheduled job could never finish.) Schedule the
+# MAGIC notebook as a job every 10 minutes for a near-live view.
 
 # COMMAND ----------
 
@@ -53,37 +55,6 @@ from brandpulse.terms import surging_terms
 
 print("repo:", REPO_ROOT)
 
-import time
-
-
-def _field(p, name):
-    if p is None:
-        return None
-    return p.get(name) if isinstance(p, dict) else getattr(p, name, None)
-
-
-def finish(q, label, timeout_s=900, idle_s=120):
-    """Wait for an availableNow stream without trusting awaitTermination.
-
-    On serverless the query can stay active after it has read everything, reporting empty
-    progress, and awaitTermination() keeps blocking. So poll instead: stop once no rows
-    have arrived for idle_s seconds, or after timeout_s as a hard ceiling.
-    """
-    t0, last_rows_at, last_batch = time.time(), time.time(), None
-    while q.isActive:
-        time.sleep(5)
-        p = q.lastProgress
-        batch, rows = _field(p, "batchId"), _field(p, "numInputRows") or 0
-        if batch != last_batch:
-            last_batch = batch
-            if rows > 0:
-                last_rows_at = time.time()
-        if time.time() - last_rows_at > idle_s or time.time() - t0 > timeout_s:
-            q.stop()
-            break
-    if q.exception():
-        raise q.exception()
-    print(f"{label}: done in {time.time() - t0:.0f}s")
 
 
 # COMMAND ----------
@@ -138,41 +109,47 @@ print(f"{len(BRANDS)} brands on the watchlist")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 1. Bronze: Kafka to Delta
+# MAGIC ## 1. Bronze: Kafka to Delta, incremental by offset
 # MAGIC Confluent's Avro wire format puts a magic byte and a 4-byte schema id in front of the
 # MAGIC Avro body. The producer and this reader share `schemas/bluesky_post.avsc`, so the header is
-# MAGIC checked and stripped, then the body decoded.
+# MAGIC checked and stripped, then the body decoded. Each record keeps its Kafka partition and offset,
+# MAGIC and the next run starts one past the highest offset per partition.
 
 # COMMAND ----------
 
+PARTITIONS = 6
+bronze_exists = spark.catalog.tableExists(T("bronze_posts"))
+existing = spark.table(T("bronze_posts")) if bronze_exists else None
+start = sj.kafka_start_offsets(existing, TOPIC, PARTITIONS)
+first_load = start == "earliest"
+print("starting offsets:", start)
+
 raw = (
-    spark.readStream.format("kafka")
+    spark.read.format("kafka")
     .options(**KAFKA_OPTIONS)
     .option("subscribe", TOPIC)
-    .option("startingOffsets", "earliest")
+    .option("startingOffsets", start)
+    .option("endingOffsets", "latest")
     .option("failOnDataLoss", "false")
-    .option("maxOffsetsPerTrigger", 200000)
     .load()
 )
 
-bronze = (
+new_posts = (
     raw.where(F.expr("substring(value, 1, 1)") == F.lit(bytearray(b"\x00")))
     .select(
         from_avro(F.expr("substring(value, 6, length(value) - 5)"), AVRO_SCHEMA, {"mode": "PERMISSIVE"}).alias("p"),
         F.col("timestamp").alias("kafka_time"),
+        F.col("partition").alias("kafka_partition"),
+        F.col("offset").alias("kafka_offset"),
     )
     .where(F.col("p").isNotNull())
-    .select("p.*", "kafka_time")
+    .select("p.*", "kafka_time", "kafka_partition", "kafka_offset")
 )
 
-q = (
-    bronze.writeStream.format("delta")
-    .option("checkpointLocation", f"{CHK}/bronze")
-    .trigger(availableNow=True)
-    .toTable(T("bronze_posts"))
-)
-finish(q, "bronze")
-print("bronze rows:", spark.table(T("bronze_posts")).count())
+# First load (or a bronze table from before offsets were tracked): rebuild from the topic.
+writer = new_posts.write.format("delta").option("mergeSchema", "true")
+(writer.mode("overwrite").option("overwriteSchema", "true") if first_load else writer.mode("append")).saveAsTable(T("bronze_posts"))
+print("bronze rows:", spark.table(T("bronze_posts")).count(), "| first load" if first_load else "")
 
 # COMMAND ----------
 
@@ -184,15 +161,18 @@ print("bronze rows:", spark.table(T("bronze_posts")).count())
 
 # COMMAND ----------
 
-silver = sj.build_silver(spark.readStream.table(T("bronze_posts")), WATCHLIST_YAML)
-q = (
-    silver.writeStream.format("delta")
-    .option("checkpointLocation", f"{CHK}/silver")
-    .trigger(availableNow=True)
-    .toTable(T("silver_mentions"))
-)
-finish(q, "silver")
-print("silver rows:", spark.table(T("silver_mentions")).count())
+bronze_all = spark.table(T("bronze_posts"))
+rebuild = first_load or not spark.catalog.tableExists(T("silver_mentions")) \
+    or "kafka_time" not in spark.table(T("silver_mentions")).columns
+if rebuild:
+    todo = bronze_all
+else:
+    mark = spark.table(T("silver_mentions")).agg(F.max("kafka_time")).first()[0]
+    todo = bronze_all.where(F.col("kafka_time") > F.lit(mark)) if mark is not None else bronze_all
+silver_new = sj.build_silver(todo, WATCHLIST_YAML)
+w = silver_new.write.format("delta").option("mergeSchema", "true")
+(w.mode("overwrite").option("overwriteSchema", "true") if rebuild else w.mode("append")).saveAsTable(T("silver_mentions"))
+print("silver rows:", spark.table(T("silver_mentions")).count(), "| rebuilt" if rebuild else "")
 
 # COMMAND ----------
 
