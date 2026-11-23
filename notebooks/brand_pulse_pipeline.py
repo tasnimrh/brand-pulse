@@ -55,10 +55,17 @@ print("repo:", REPO_ROOT)
 
 # COMMAND ----------
 
-# ---- Settings (endpoints are configuration; credentials come from the secret scope) ----
-BOOTSTRAP_SERVERS = "<pkc-xxxxx.region.provider.confluent.cloud:9092>"
-TOPIC = "bluesky.posts"
-SECRET_SCOPE = "confluent"   # same scope as the Kafka assignment: keys api_key, api_secret
+# ---- Settings (endpoints are notebook parameters; credentials come from the secret scope) ----
+dbutils.widgets.text("bootstrap_servers", "", "Kafka bootstrap server")
+dbutils.widgets.text("topic", "bluesky.posts", "Kafka topic")
+BOOTSTRAP_SERVERS = dbutils.widgets.get("bootstrap_servers").strip()
+TOPIC = dbutils.widgets.get("topic").strip()
+SECRET_SCOPE = "confluent"   # keys: api_key, api_secret
+
+scopes = {s.name for s in dbutils.secrets.listScopes()}
+assert SECRET_SCOPE in scopes, f"Create the secret scope '{SECRET_SCOPE}' with keys api_key and api_secret first."
+keys = {k.key for k in dbutils.secrets.list(SECRET_SCOPE)}
+assert {"api_key", "api_secret"} <= keys, f"Scope '{SECRET_SCOPE}' needs keys api_key and api_secret; found {sorted(keys)}."
 
 CATALOG, SCHEMA = "workspace", "brand_pulse"
 WINDOW_MINUTES = 5
@@ -80,7 +87,7 @@ KAFKA_OPTIONS = {
         f'username="{KAFKA_API_KEY}" password="{KAFKA_API_SECRET}";'
     ),
 }
-assert "<" not in BOOTSTRAP_SERVERS, "Set BOOTSTRAP_SERVERS to your cluster's bootstrap server."
+assert BOOTSTRAP_SERVERS.endswith(":9092"), "Fill in the 'Kafka bootstrap server' box at the top of the notebook."
 
 AVRO_SCHEMA = open(os.path.join(REPO_ROOT, "schemas", "bluesky_post.avsc")).read()
 WATCHLIST_YAML = open(os.path.join(REPO_ROOT, "watchlist.yml"), encoding="utf-8").read()

@@ -60,7 +60,7 @@ cp .env.example .env
 python producer/jetstream_to_kafka.py
 ```
 
-In Databricks: add this repo as a Git folder, store the Kafka API key and secret in a secret scope called `confluent` (keys `api_key`, `api_secret`), set `BOOTSTRAP_SERVERS` in `notebooks/brand_pulse_pipeline.py`, and run it. Schedule it as a job every 10 minutes for a near-live view. Dashboard queries are in `sql/dashboard.sql`.
+In Databricks: add this repo as a Git folder, store the Kafka API key and secret in a secret scope called `confluent` (keys `api_key`, `api_secret`), fill in the bootstrap server box at the top of `notebooks/brand_pulse_pipeline.py`, and run it. Schedule it as a job every 10 minutes for a near-live view. Dashboard queries are in `sql/dashboard.sql`.
 
 Tests run without any cloud account:
 
