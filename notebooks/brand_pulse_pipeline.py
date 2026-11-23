@@ -60,25 +60,22 @@ def finish(q, label, timeout_s=900, idle_s=60):
     """Wait for an availableNow stream without trusting awaitTermination.
 
     On serverless, awaitTermination() can keep blocking after the query has processed
-    everything. So poll instead: stop once no new micro-batch has started for idle_s
-    seconds (availableNow runs its batches back to back, so a pause means it is done),
-    or after timeout_s as a hard ceiling.
+    everything. So poll instead: count completed micro-batches, and stop once none has
+    finished for idle_s seconds (availableNow runs its batches back to back, so a pause
+    means it is done), or after timeout_s as a hard ceiling.
     """
-    t0, last_batch, last_change = time.time(), None, time.time()
+    t0, seen, last_change = time.time(), 0, time.time()
     while q.isActive:
         time.sleep(5)
-        p = q.lastProgress or {}
-        p = p if isinstance(p, dict) else getattr(p, "__dict__", {})
-        batch = p.get("batchId")
-        if batch != last_batch:
-            last_batch, last_change = batch, time.time()
-        caught_up = batch is not None and time.time() - last_change > idle_s
-        if caught_up or time.time() - t0 > timeout_s:
+        n = len(q.recentProgress or [])
+        if n != seen:
+            seen, last_change = n, time.time()
+        if time.time() - last_change > idle_s or time.time() - t0 > timeout_s:
             q.stop()
             break
     if q.exception():
         raise q.exception()
-    print(f"{label}: done in {time.time() - t0:.0f}s, last batch {last_batch}")
+    print(f"{label}: done in {time.time() - t0:.0f}s after {seen} micro-batches")
 
 
 # COMMAND ----------
