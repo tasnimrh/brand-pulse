@@ -56,25 +56,34 @@ print("repo:", REPO_ROOT)
 # COMMAND ----------
 
 # ---- Settings (endpoints are notebook parameters; credentials come from the secret scope) ----
+import json
+
+CATALOG, SCHEMA = "workspace", "brand_pulse"
+WINDOW_MINUTES = 5
+RULES = Rules()  # thresholds live in brandpulse/anomaly.py and are unit-tested
+SECRET_SCOPE = "confluent"   # keys: api_key, api_secret
+
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.state")
+STATE = f"/Volumes/{CATALOG}/{SCHEMA}/state"
+CHK = f"{STATE}/checkpoints"
+T = lambda name: f"{CATALOG}.{SCHEMA}.{name}"
+
+# The bootstrap server is configuration, not a secret. Enter it once in the parameter box;
+# it is remembered in the volume, so later runs, pulls and scheduled jobs need no input.
 dbutils.widgets.text("bootstrap_servers", "", "Kafka bootstrap server")
 dbutils.widgets.text("topic", "bluesky.posts", "Kafka topic")
-BOOTSTRAP_SERVERS = dbutils.widgets.get("bootstrap_servers").strip()
-TOPIC = dbutils.widgets.get("topic").strip()
-SECRET_SCOPE = "confluent"   # keys: api_key, api_secret
+CONFIG = f"{STATE}/config.json"
+saved = json.load(open(CONFIG)) if os.path.exists(CONFIG) else {}
+BOOTSTRAP_SERVERS = dbutils.widgets.get("bootstrap_servers").strip() or saved.get("bootstrap_servers", "")
+TOPIC = dbutils.widgets.get("topic").strip() or saved.get("topic", "bluesky.posts")
+assert BOOTSTRAP_SERVERS.endswith(":9092"), "Enter the Kafka bootstrap server in the Parameters panel once."
+json.dump({"bootstrap_servers": BOOTSTRAP_SERVERS, "topic": TOPIC}, open(CONFIG, "w"))
 
 scopes = {s.name for s in dbutils.secrets.listScopes()}
 assert SECRET_SCOPE in scopes, f"Create the secret scope '{SECRET_SCOPE}' with keys api_key and api_secret first."
 keys = {k.key for k in dbutils.secrets.list(SECRET_SCOPE)}
 assert {"api_key", "api_secret"} <= keys, f"Scope '{SECRET_SCOPE}' needs keys api_key and api_secret; found {sorted(keys)}."
-
-CATALOG, SCHEMA = "workspace", "brand_pulse"
-WINDOW_MINUTES = 5
-RULES = Rules()  # thresholds live in brandpulse/anomaly.py and are unit-tested
-
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
-spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.state")
-CHK = f"/Volumes/{CATALOG}/{SCHEMA}/state/checkpoints"
-T = lambda name: f"{CATALOG}.{SCHEMA}.{name}"
 
 KAFKA_API_KEY = dbutils.secrets.get(SECRET_SCOPE, "api_key")
 KAFKA_API_SECRET = dbutils.secrets.get(SECRET_SCOPE, "api_secret")
@@ -87,7 +96,6 @@ KAFKA_OPTIONS = {
         f'username="{KAFKA_API_KEY}" password="{KAFKA_API_SECRET}";'
     ),
 }
-assert BOOTSTRAP_SERVERS.endswith(":9092"), "Fill in the 'Kafka bootstrap server' box at the top of the notebook."
 
 AVRO_SCHEMA = open(os.path.join(REPO_ROOT, "schemas", "bluesky_post.avsc")).read()
 WATCHLIST_YAML = open(os.path.join(REPO_ROOT, "watchlist.yml"), encoding="utf-8").read()
