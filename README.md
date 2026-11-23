@@ -6,6 +6,21 @@ Every new public post on Bluesky streams from a laptop into Kafka, then through 
 
 Built for fun, to answer one question: *when a brand has a bad day, how fast does it show up in public?*
 
+## How this differs from the usual version
+
+Streaming social posts through Kafka and Spark to score brand sentiment is a common project. Most versions stop once a dashboard shows numbers. This one asks whether those numbers, and the alerts built on them, can be trusted, and measures the answer.
+
+| Most versions | Brand Pulse | Measured result |
+|---|---|---|
+| Replay a static or simulated dataset | Streams every new public Bluesky post, live | 359,699 posts in one evening |
+| Count every keyword hit as a mention | Separates deal bots and affiliate ads from real conversation | 17% of brand mentions were bots or ads; 30% of Amazon's |
+| Count shared links as conversation | A link is not a mention: URLs are removed before matching | Matches fell by about a third; a false Spotify alert disappeared |
+| Alert on raw volume or a fixed threshold | Compares each brand's share of voice with its own baseline, with a Poisson tail test | False alerts went from 1 to 0 |
+| Plain keyword matching | Handles ambiguous names (Rogers vs Fred Rogers, TD vs touchdown, Tesla vs Nikola Tesla) | Each case is a unit test; 45 tests in total |
+| A stream that never has to finish | Offset-tracked incremental batch reads | Exactly once, and every run ends in about 2 minutes on Databricks serverless |
+
+What this does not claim: it has not been benchmarked head to head against other systems, and one quiet evening is not enough to measure alert precision. Those limits are listed below.
+
 ## Results: first live run (22 November 2026, 5:14 pm to 7:58 pm Montreal time)
 
 | | |
