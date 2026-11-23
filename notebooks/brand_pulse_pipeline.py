@@ -56,12 +56,10 @@ print("repo:", REPO_ROOT)
 import time
 
 
-def _rows(p):
+def _field(p, name):
     if p is None:
-        return 0
-    if isinstance(p, dict):
-        return p.get("numInputRows", 0) or 0
-    return getattr(p, "numInputRows", 0) or 0
+        return None
+    return p.get(name) if isinstance(p, dict) else getattr(p, name, None)
 
 
 def finish(q, label, timeout_s=900, idle_s=60):
@@ -71,13 +69,15 @@ def finish(q, label, timeout_s=900, idle_s=60):
     progress, and awaitTermination() keeps blocking. So poll instead: stop once no rows
     have arrived for idle_s seconds, or after timeout_s as a hard ceiling.
     """
-    t0, last_rows_at, total = time.time(), time.time(), 0
+    t0, last_rows_at, last_batch = time.time(), time.time(), None
     while q.isActive:
         time.sleep(5)
-        rows = _rows(q.lastProgress)
-        if rows > 0:
-            last_rows_at = time.time()
-            total += rows
+        p = q.lastProgress
+        batch, rows = _field(p, "batchId"), _field(p, "numInputRows") or 0
+        if batch != last_batch:
+            last_batch = batch
+            if rows > 0:
+                last_rows_at = time.time()
         if time.time() - last_rows_at > idle_s or time.time() - t0 > timeout_s:
             q.stop()
             break
