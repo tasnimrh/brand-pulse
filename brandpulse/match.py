@@ -55,6 +55,22 @@ class Brand:
         return bool(self._ci and self._ci.search(masked)) or bool(self._cs and self._cs.search(masked))
 
 
+# Deal bots and affiliate ads mention brands constantly but say nothing about them.
+# Found on the first live run: most "Amazon" mentions were posts like
+# "only $9.92 (Reg $14.17) amzn.to/..." or "As an Amazon Associate I earn...".
+# The same pattern runs in Spark (Java regex) and in Python, so it is tested once here.
+PROMO_PATTERN = (
+    r"(?i)(amzn\.to/|amazon\.[a-z.]+/dp/|amazon associate|#ad\b|#sponsored|\baffiliate\b|promo code|use code"
+    r"|\bonly \$|\(reg\.? \$|compre aqui|click here|chollo|\d{1,3} ?% off|% descuento|deal of the day"
+    r"|price drop|lowest price|\bcoupon\b)"
+)
+_PROMO = re.compile(PROMO_PATTERN)
+
+
+def is_promotional(text: str) -> bool:
+    return bool(_PROMO.search(text or ""))
+
+
 def load_watchlist(path_or_text: str) -> list[Brand]:
     if "\n" in path_or_text or path_or_text.lstrip().startswith("brands"):
         data = yaml.safe_load(path_or_text)

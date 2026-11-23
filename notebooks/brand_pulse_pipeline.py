@@ -197,7 +197,7 @@ for a in alerts:
     w0 = a.window_start
     w1 = F.lit(w0) + F.expr(f"INTERVAL {WINDOW_MINUTES} MINUTES")
     b0 = F.lit(w0) - F.expr(f"INTERVAL {WINDOW_MINUTES * RULES.history_windows} MINUTES")
-    brand_posts = silver_t.where(F.col("brand") == a.brand)
+    brand_posts = sj.organic(silver_t).where(F.col("brand") == a.brand)
     win = brand_posts.where((F.col("event_time") >= F.lit(w0)) & (F.col("event_time") < w1))
     base = brand_posts.where((F.col("event_time") >= b0) & (F.col("event_time") < F.lit(w0)))
     win_rows = win.select("text", "did", "rkey", "compound").collect()
@@ -212,6 +212,25 @@ explained_schema = ("brand string, window_start timestamp, label string, mention
 spark.createDataFrame(rows, explained_schema).write.mode("overwrite").option("overwriteSchema", "true") \
     .saveAsTable(T("alerts_explained"))
 display(spark.table(T("alerts_explained")).orderBy(F.desc("window_start")))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 4b. How much of each brand's "conversation" is deal bots and affiliate ads?
+# MAGIC These posts stay in silver for transparency but are left out of gold and alerts.
+
+# COMMAND ----------
+
+from brandpulse.match import PROMO_PATTERN
+
+display(
+    spark.table(T("silver_mentions")).dropDuplicates(["uri", "brand"])
+    .groupBy("brand")
+    .agg(F.count("*").alias("all_mentions"),
+         F.sum(F.col("text").rlike(PROMO_PATTERN).cast("int")).alias("promo_or_bot"))
+    .withColumn("promo_share", F.round(F.col("promo_or_bot") / F.col("all_mentions"), 2))
+    .orderBy(F.desc("all_mentions"))
+)
 
 # COMMAND ----------
 

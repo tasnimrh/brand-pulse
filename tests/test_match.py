@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from brandpulse.match import load_watchlist, match_brands
+from brandpulse.match import is_promotional, load_watchlist, match_brands
 
 WATCHLIST = load_watchlist(os.path.join(os.path.dirname(__file__), "..", "watchlist.yml"))
 
@@ -46,3 +46,30 @@ def test_false_positives_are_rejected(text):
 def test_exclude_only_removes_the_excluded_phrase():
     # The inventor is excluded, but a second, real mention of the company still counts.
     assert match_brands("Nikola Tesla would hate what Tesla did today", WATCHLIST) == ["Tesla"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Smart Sunrise Alarm Clock only $49.99 (Reg $99.99) amazon.com/dp/B0H4TVMP67",
+        "Ad: As an Amazon Associate I earn from qualifying purchases.",
+        "Save 50.0% on select products with promo code JLNWO7MN https://amzn.to/4abc",
+        "Magpie Games core book - 34% off #ad www.amazon.com/dp/195288569",
+        "Por apenas R$34,99 Compre aqui: https://botvaro.com/l/x",
+        "CHOLLACO #Amazon 21 % DESCUENTO",
+    ],
+)
+def test_promotional_posts_are_flagged(text):
+    assert is_promotional(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Unfortunately I had to get them on amazon because I need 24",
+        "Amazon lost my package again, third time this month",
+        "Air Canada cancelled my flight, 10% of my patience left",
+    ],
+)
+def test_real_conversation_is_kept(text):
+    assert not is_promotional(text)

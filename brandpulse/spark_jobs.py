@@ -14,7 +14,7 @@ from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
 from brandpulse.anomaly import Rules, score_brand
-from brandpulse.match import load_watchlist, match_brands
+from brandpulse.match import PROMO_PATTERN, load_watchlist, match_brands
 
 NEG, POS = -0.05, 0.05  # VADER's standard cut-offs on the compound score
 
@@ -74,10 +74,15 @@ def platform_windows(bronze: DataFrame, minutes: int = 5) -> DataFrame:
     )
 
 
+def organic(silver: DataFrame) -> DataFrame:
+    """Mentions that are conversation, not deal bots or affiliate ads."""
+    return silver.where(~F.col("text").rlike(PROMO_PATTERN))
+
+
 def brand_windows(silver: DataFrame, platform: DataFrame, brand_names: list[str], minutes: int = 5) -> DataFrame:
     spark = silver.sparkSession
     counts = (
-        silver.dropDuplicates(["uri", "brand"])
+        organic(silver).dropDuplicates(["uri", "brand"])
         .groupBy("brand", F.window("event_time", f"{minutes} minutes").alias("w"))
         .agg(
             F.count("*").alias("mentions"),

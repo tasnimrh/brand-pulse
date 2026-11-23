@@ -44,6 +44,11 @@ def synthetic_bronze(spark):
                 rows.append((f"at://did:plc:{n}/app.bsky.feed.post/{n}", f"did:plc:{n}", str(n),
                               "Air Canada system outage, flights cancelled, terrible, stuck at the airport", ["en"],
                               False, None, t0 + timedelta(minutes=minute, seconds=rng.randint(0, 59))))
+        if minute % 3 == 0:  # a deal bot that must not count as Air Canada conversation
+            n += 1
+            rows.append((f"at://did:plc:{n}/app.bsky.feed.post/{n}", f"did:plc:{n}", str(n),
+                         "Air Canada luggage tag only $9.99 (Reg $19.99) amzn.to/x", ["en"], False, None,
+                         t0 + timedelta(minutes=minute, seconds=5)))
     # a duplicate delivery, as Kafka can produce
     rows.append(rows[-1])
     return spark.createDataFrame(rows, "uri string, did string, rkey string, text string, langs array<string>, "
