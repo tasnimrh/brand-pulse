@@ -53,6 +53,33 @@ from brandpulse.terms import surging_terms
 
 print("repo:", REPO_ROOT)
 
+import time
+
+
+def finish(q, label, timeout_s=900, idle_s=60):
+    """Wait for an availableNow stream without trusting awaitTermination.
+
+    On serverless, awaitTermination() can keep blocking after the query has processed
+    everything. So poll instead: stop once no new micro-batch has started for idle_s
+    seconds and the last one read nothing, or after timeout_s as a hard ceiling.
+    """
+    t0, last_batch, last_change = time.time(), None, time.time()
+    while q.isActive:
+        time.sleep(5)
+        p = q.lastProgress or {}
+        p = p if isinstance(p, dict) else getattr(p, "__dict__", {})
+        batch, rows = p.get("batchId"), p.get("numInputRows", 0)
+        if batch != last_batch:
+            last_batch, last_change = batch, time.time()
+        caught_up = batch is not None and rows == 0 and time.time() - last_change > idle_s
+        if caught_up or time.time() - t0 > timeout_s:
+            q.stop()
+            break
+    if q.exception():
+        raise q.exception()
+    print(f"{label}: done in {time.time() - t0:.0f}s, last batch {last_batch}")
+
+
 # COMMAND ----------
 
 # ---- Settings (endpoints are notebook parameters; credentials come from the secret scope) ----
@@ -138,7 +165,7 @@ q = (
     .trigger(availableNow=True)
     .toTable(T("bronze_posts"))
 )
-q.awaitTermination()
+finish(q, "bronze")
 print("bronze rows:", spark.table(T("bronze_posts")).count())
 
 # COMMAND ----------
@@ -158,7 +185,7 @@ q = (
     .trigger(availableNow=True)
     .toTable(T("silver_mentions"))
 )
-q.awaitTermination()
+finish(q, "silver")
 print("silver rows:", spark.table(T("silver_mentions")).count())
 
 # COMMAND ----------
