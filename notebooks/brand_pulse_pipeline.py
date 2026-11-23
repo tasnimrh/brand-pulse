@@ -62,7 +62,7 @@ def _field(p, name):
     return p.get(name) if isinstance(p, dict) else getattr(p, name, None)
 
 
-def finish(q, label, timeout_s=900, idle_s=60):
+def finish(q, label, timeout_s=900, idle_s=120):
     """Wait for an availableNow stream without trusting awaitTermination.
 
     On serverless the query can stay active after it has read everything, reporting empty
