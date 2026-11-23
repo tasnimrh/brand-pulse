@@ -82,7 +82,8 @@ saved = json.load(open(CONFIG)) if os.path.exists(CONFIG) else {}
 BOOTSTRAP_SERVERS = dbutils.widgets.get("bootstrap_servers").strip() or saved.get("bootstrap_servers", "")
 TOPIC = dbutils.widgets.get("topic").strip() or saved.get("topic", "bluesky.posts")
 assert BOOTSTRAP_SERVERS.endswith(":9092"), "Enter the Kafka bootstrap server in the Parameters panel once."
-json.dump({"bootstrap_servers": BOOTSTRAP_SERVERS, "topic": TOPIC}, open(CONFIG, "w"))
+saved.update({"bootstrap_servers": BOOTSTRAP_SERVERS, "topic": TOPIC})
+json.dump(saved, open(CONFIG, "w"))
 
 scopes = {s.name for s in dbutils.secrets.listScopes()}
 assert SECRET_SCOPE in scopes, f"Create the secret scope '{SECRET_SCOPE}' with keys api_key and api_secret first."
@@ -161,9 +162,13 @@ print("bronze rows:", spark.table(T("bronze_posts")).count(), "| first load" if 
 
 # COMMAND ----------
 
+from brandpulse.match import MATCH_VERSION
+
 bronze_all = spark.table(T("bronze_posts"))
+cfg = json.load(open(CONFIG))
 rebuild = first_load or not spark.catalog.tableExists(T("silver_mentions")) \
-    or "kafka_time" not in spark.table(T("silver_mentions")).columns
+    or "kafka_time" not in spark.table(T("silver_mentions")).columns \
+    or cfg.get("match_version") != MATCH_VERSION
 if rebuild:
     todo = bronze_all
 else:
@@ -172,7 +177,9 @@ else:
 silver_new = sj.build_silver(todo, WATCHLIST_YAML)
 w = silver_new.write.format("delta").option("mergeSchema", "true")
 (w.mode("overwrite").option("overwriteSchema", "true") if rebuild else w.mode("append")).saveAsTable(T("silver_mentions"))
-print("silver rows:", spark.table(T("silver_mentions")).count(), "| rebuilt" if rebuild else "")
+cfg["match_version"] = MATCH_VERSION
+json.dump(cfg, open(CONFIG, "w"))
+print("silver rows:", spark.table(T("silver_mentions")).count(), f"| rebuilt (matching v{MATCH_VERSION})" if rebuild else "")
 
 # COMMAND ----------
 

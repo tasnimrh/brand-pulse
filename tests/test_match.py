@@ -73,3 +73,17 @@ def test_promotional_posts_are_flagged(text):
 )
 def test_real_conversation_is_kept(text):
     assert not is_promotional(text)
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("open.spotify.com/track/1Emnte", []),
+        ("Listen on https://open.spotify.com/playlist/0s4", []),
+        ("new single out now www.amazon.com/dp/B0H4", []),
+        ("Spotify has been taking passive aggression lessons from the Duolingo owl", ["Spotify"]),
+        ("Spotify keeps pausing, link: open.spotify.com/track/x", ["Spotify"]),
+    ],
+)
+def test_links_are_not_mentions(text, expected):
+    assert match_brands(text, WATCHLIST) == expected

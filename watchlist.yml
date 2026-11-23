@@ -120,7 +120,7 @@ brands:
   - name: Amazon
     ticker: AMZN
     sector: Retail
-    aliases: ["amazon prime", "amazon.com", "aws outage", "amazon"]
+    aliases: ["amazon prime", "aws outage", "amazon"]
     exclude: ["amazon rainforest", "amazon river", "the amazon basin"]
   - name: OpenAI
     sector: Technology

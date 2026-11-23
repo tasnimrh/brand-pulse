@@ -11,6 +11,20 @@ from dataclasses import dataclass, field
 
 import yaml
 
+# Bump when matching behaviour changes; the pipeline rebuilds silver when it sees a new version.
+MATCH_VERSION = 2
+
+# A link is not a mention. Found on the first live run: a Spotify "spike" was mostly people
+# sharing songs (open.spotify.com/track/...), saying nothing about Spotify. URLs are removed
+# before matching, so a brand counts only when someone writes about it.
+_URL = re.compile(r"(https?://\S+|www\.\S+|\b[\w-]+(\.[\w-]+)*\.(com|ca|net|org|io|app|co|ly|to|tv|fm|me|gl|be)(/\S*)?)",
+                  re.IGNORECASE)
+
+
+def strip_urls(text: str) -> str:
+    return _URL.sub(" ", text or "")
+
+
 # A word boundary that also respects @handles, #tags and accented letters.
 _LEFT = r"(?<![\w@#])"
 _RIGHT = r"(?![\w])"
@@ -81,4 +95,5 @@ def load_watchlist(path_or_text: str) -> list[Brand]:
 
 
 def match_brands(text: str, brands: list[Brand]) -> list[str]:
-    return [b.name for b in brands if b.matches(text)]
+    clean = strip_urls(text)
+    return [b.name for b in brands if b.matches(clean)]
