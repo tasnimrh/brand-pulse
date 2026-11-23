@@ -64,6 +64,9 @@ def make_sink(dry_run: bool, out_path: str | None):
     missing = [k for k in need if not os.environ.get(k)]
     if missing:
         sys.exit(f"Missing settings in .env: {', '.join(missing)}")
+    placeholders = [k for k in need if "xxxxx" in os.environ.get(k, "")]
+    if placeholders:
+        sys.exit(f".env still has template values for: {', '.join(placeholders)}. Fill them in, then run again.")
     topic = os.environ.get("TOPIC", "bluesky.posts")
 
     schema_str = (ROOT / "schemas" / "bluesky_post.avsc").read_text()
